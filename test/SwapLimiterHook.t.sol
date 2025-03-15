@@ -43,7 +43,7 @@ contract SwapLimiterHookTest is Test, Fixtures {
         address flags = address(
             uint160(Hooks.BEFORE_SWAP_FLAG) ^ (0x4444 << 144) // Namespace the hook to avoid collisions
         );
-        bytes memory constructorArgs = abi.encode(manager); //Add all the necessary constructor arguments from the hook
+        bytes memory constructorArgs = abi.encode(manager); // Add all the necessary constructor arguments from the hook
         deployCodeTo("SwapLimiterHook.sol:SwapLimiterHook", constructorArgs, flags);
         hook = SwapLimiterHook(flags);
 
@@ -56,7 +56,7 @@ contract SwapLimiterHookTest is Test, Fixtures {
         tickLower = TickMath.minUsableTick(key.tickSpacing);
         tickUpper = TickMath.maxUsableTick(key.tickSpacing);
 
-        uint128 liquidityAmount = 1000e18;
+        uint128 liquidityAmount = 100_000 * 1e18;
 
         (uint256 amount0Expected, uint256 amount1Expected) = LiquidityAmounts.getAmountsForLiquidity(
             SQRT_PRICE_1_1,
@@ -65,7 +65,7 @@ contract SwapLimiterHookTest is Test, Fixtures {
             liquidityAmount
         );
 
-        uint256 currency0_before = currency0.balanceOf(address(this));
+        uint256 currency0_before = currency0.balanceOf(address(this)) / 1e18;
 
         console2.log("User address: ", address(this));
 
@@ -85,20 +85,28 @@ contract SwapLimiterHookTest is Test, Fixtures {
 
         console2.log("posm Token ID: ", tokenId);
 
-        uint256 currency0_after = currency0.balanceOf(address(this));
+        uint256 currency0_after = currency0.balanceOf(address(this)) / 1e18;
 
         console2.log("User balance in currency0 after minting: ", currency0_after);
 
         console2.log("mint pool Amount of currency0 spent: ", currency0_before - currency0_after);
+
+        console2.log("User address: ", address(this));
+        console2.log("SwapLimiterHook address: ", address(hook));
+        console2.log("SwapRouter address: ", address(swapRouter));
+        console2.log("PoolManager address: ", address(manager));
     }
 
     function testSwapHook() public {
         assertEq(hook.getRemainingSwaps(address(swapRouter)), 5);
 
         uint256 remainingSwaps;
-        // Perform a test swap //
+        // Perform a test swap
         bool zeroForOne = true;
         int256 amountSpecified = -1e18; // negative number indicates exact input swap!
+
+        address user = address(this);
+        bytes memory hookData = abi.encode(user);
 
         for (uint256 i = 0; i < 4; i++) {
             vm.warp(block.timestamp + 100);
@@ -108,9 +116,9 @@ contract SwapLimiterHookTest is Test, Fixtures {
             console2.log("Start Swap Number: ", i + 1);
 
             // SwapLimiterHookTest contract call swapRouter to swap
-            swap(key, zeroForOne, amountSpecified, ZERO_BYTES);
+            swap(key, zeroForOne, amountSpecified, hookData);
 
-            remainingSwaps = hook.getRemainingSwaps(address(swapRouter));
+            remainingSwaps = hook.getRemainingSwaps(address(user));
 
             console2.log("End Swap Time: ", block.timestamp);
             console2.log("Remaining Swap Count in 1 Hours: ", remainingSwaps);
@@ -123,11 +131,11 @@ contract SwapLimiterHookTest is Test, Fixtures {
         vm.warp(block.timestamp + 100);
 
         vm.expectEmit(true, true, true, true);
-        emit SwapLimiterHook.SwapLimitReached(address(swapRouter), block.timestamp);
+        emit SwapLimiterHook.SwapLimitReached(address(user), block.timestamp);
 
-        swap(key, zeroForOne, amountSpecified, ZERO_BYTES);
+        swap(key, zeroForOne, amountSpecified, hookData);
 
-        remainingSwaps = hook.getRemainingSwaps(address(swapRouter));
+        remainingSwaps = hook.getRemainingSwaps(address(user));
 
         console2.log("End Swap Time: ", block.timestamp);
         console2.log("Remaining Swap Count in 1 Hours: ", remainingSwaps);
@@ -148,7 +156,7 @@ contract SwapLimiterHookTest is Test, Fixtures {
             )
         );
 
-        swap(key, zeroForOne, amountSpecified, ZERO_BYTES);
+        swap(key, zeroForOne, amountSpecified, hookData);
 
         console2.log("Revert SwapLimitExceeded");
         console2.log("-----------------");
@@ -156,7 +164,7 @@ contract SwapLimiterHookTest is Test, Fixtures {
         vm.warp(block.timestamp + 3600);
         console2.log("Wait For 1 Hour, Now Time: ", block.timestamp);
 
-        remainingSwaps = hook.getRemainingSwaps(address(swapRouter));
+        remainingSwaps = hook.getRemainingSwaps(address(user));
 
         console2.log("Remaining Swap Count in 1 Hours: ", remainingSwaps);
     }

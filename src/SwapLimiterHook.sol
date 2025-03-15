@@ -45,13 +45,15 @@ contract SwapLimiterHook is BaseHook {
         });
     }
 
-    function _beforeSwap(address sender, PoolKey calldata, IPoolManager.SwapParams calldata, bytes calldata)
-        internal
-        override
-        returns (bytes4, BeforeSwapDelta, uint24)
-    {
+    function _beforeSwap(
+        address, /* sender */
+        PoolKey calldata,
+        IPoolManager.SwapParams calldata,
+        bytes calldata hookData
+    ) internal override returns (bytes4, BeforeSwapDelta, uint24) {
         uint256 currentTime = block.timestamp;
 
+        (address sender) = abi.decode(hookData, (address));
 
         if (currentTime - lastResetTime[sender] > HOUR) {
             swapCount[sender] = 0;
