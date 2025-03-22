@@ -185,7 +185,7 @@ contract SwapLimiterHookTest is Test, Fixtures {
         vm.expectEmit(true, true, true, true, address(manager));
         emit IERC6909Claims.Transfer(address(swapRouter), address(0), user, currency_id, uint256(amountSpecified));
 
-        swapToken(key, zeroForOne, amountSpecified, hookData, true);
+        swapToken(key, zeroForOne, amountSpecified, hookData, true, false);
 
         uint256 balance_erc6909_user_after = manager.balanceOf(user, currency_id);
 
@@ -195,20 +195,43 @@ contract SwapLimiterHookTest is Test, Fixtures {
         );
 
         assertEq(balance_erc6909_user_after - balance_erc6909_user_before, uint256(amountSpecified));
+
+        console2.log("-----------------");
+
+        console2.log("Currency1 Swap To Currency0");
+        console2.log("Set settleUsingBurn to `true`, will Burn Currency1 ERC6909 of User");
+
+        zeroForOne = false;
+        amountSpecified = -1e18;
+
+        manager.setOperator(address(swapRouter), true);
+
+        vm.expectEmit(true, true, true, true, address(manager));
+        emit IERC6909Claims.Transfer(
+            address(swapRouter), address(user), address(0), currency_id, uint256(-amountSpecified)
+        );
+
+        swapToken(key, zeroForOne, amountSpecified, hookData, false, true);
+
+        uint256 balance_erc6909_user = manager.balanceOf(user, currency_id);
+
+        console2.log("User Currency1 ERC6909 Balance: ", balance_erc6909_user);
     }
 
     /// @notice Helper function for a simple ERC20 swaps
     /// @param zeroForOne true if currency0 to currency1, false if currency1 to currency0
     /// @param amountSpecified the desired input amount if negative (exactIn), or the desired output amount if positive (exactOut)
     /// @param hookData The data to pass through to the swap hooks
-    /// @param takeClaims true if mint ERC6909, false if transfer ERC20
+    /// @param takeClaims true if take mint ERC6909, false if take transfer ERC20
+    /// @param settleUsingBurn true if settle using burn, false if settle using transfer
     /// @return swapDelta The balance delta of the address swapping
     function swapToken(
         PoolKey memory _key,
         bool zeroForOne,
         int256 amountSpecified,
         bytes memory hookData,
-        bool takeClaims
+        bool takeClaims,
+        bool settleUsingBurn
     ) internal returns (BalanceDelta) {
         // allow native input for exact-input, guide users to the `swapNativeInput` function
         bool isNativeInput = zeroForOne && _key.currency0.isAddressZero();
@@ -223,7 +246,7 @@ contract SwapLimiterHookTest is Test, Fixtures {
                 amountSpecified: amountSpecified,
                 sqrtPriceLimitX96: zeroForOne ? MIN_PRICE_LIMIT : MAX_PRICE_LIMIT
             }),
-            PoolSwapTest.TestSettings({takeClaims: takeClaims, settleUsingBurn: false}),
+            PoolSwapTest.TestSettings({takeClaims: takeClaims, settleUsingBurn: settleUsingBurn}),
             hookData
         );
     }
