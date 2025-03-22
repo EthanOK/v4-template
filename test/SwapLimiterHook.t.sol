@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {Hooks, CustomRevert} from "v4-core/src/libraries/Hooks.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
-import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
+import {IPoolManager, IERC6909Claims} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
@@ -167,5 +167,64 @@ contract SwapLimiterHookTest is Test, Fixtures {
         remainingSwaps = hook.getRemainingSwaps(address(user));
 
         console2.log("Remaining Swap Count in 1 Hours: ", remainingSwaps);
+        console2.log("-----------------");
+
+        console2.log("Currency0 Swap To Currency1");
+        console2.log("Set takeClaims to `true`, will Mint Currency1 ERC6909 To User");
+
+        // takeClaims = true
+        // mint ERC6909 Token to user, instead of transfer ERC20 Token to user
+
+        zeroForOne = true;
+        amountSpecified = 1e18;
+
+        uint256 currency_id = currency1.toId();
+
+        uint256 balance_erc6909_user_before = manager.balanceOf(user, currency_id);
+
+        vm.expectEmit(true, true, true, true, address(manager));
+        emit IERC6909Claims.Transfer(address(swapRouter), address(0), user, currency_id, uint256(amountSpecified));
+
+        swapToken(key, zeroForOne, amountSpecified, hookData, true);
+
+        uint256 balance_erc6909_user_after = manager.balanceOf(user, currency_id);
+
+        console2.log(
+            "Mint Currency1 ERC6909 To User Balance Change: ",
+            uint256(balance_erc6909_user_after - balance_erc6909_user_before)
+        );
+
+        assertEq(balance_erc6909_user_after - balance_erc6909_user_before, uint256(amountSpecified));
+    }
+
+    /// @notice Helper function for a simple ERC20 swaps
+    /// @param zeroForOne true if currency0 to currency1, false if currency1 to currency0
+    /// @param amountSpecified the desired input amount if negative (exactIn), or the desired output amount if positive (exactOut)
+    /// @param hookData The data to pass through to the swap hooks
+    /// @param takeClaims true if mint ERC6909, false if transfer ERC20
+    /// @return swapDelta The balance delta of the address swapping
+    function swapToken(
+        PoolKey memory _key,
+        bool zeroForOne,
+        int256 amountSpecified,
+        bytes memory hookData,
+        bool takeClaims
+    ) internal returns (BalanceDelta) {
+        // allow native input for exact-input, guide users to the `swapNativeInput` function
+        bool isNativeInput = zeroForOne && _key.currency0.isAddressZero();
+        if (isNativeInput) require(0 > amountSpecified, "Use swapNativeInput() for native-token exact-output swaps");
+
+        uint256 value = isNativeInput ? uint256(-amountSpecified) : 0;
+
+        return swapRouter.swap{value: value}(
+            _key,
+            IPoolManager.SwapParams({
+                zeroForOne: zeroForOne,
+                amountSpecified: amountSpecified,
+                sqrtPriceLimitX96: zeroForOne ? MIN_PRICE_LIMIT : MAX_PRICE_LIMIT
+            }),
+            PoolSwapTest.TestSettings({takeClaims: takeClaims, settleUsingBurn: false}),
+            hookData
+        );
     }
 }

@@ -1,0 +1,17 @@
+{
+  "name": "v4-template",
+  "version": "1.0.0",
+  "description": "[`Use this Template`](https://github.com/uniswapfoundation/v4-template/generate)",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib",
+    "test": "test"
+  },
+  "scripts": {
+    "test SwapLimiterHook contract": "forge test --match-path test/SwapLimiterHook.t.sol -vvv",
+    "test testCounterHooks function": "forge test --match-test testCounterHooks -vvv"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
